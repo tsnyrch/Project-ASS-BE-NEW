@@ -1,0 +1,30 @@
+services:
+  fast-api-docker-poetry:
+    image: ${IMAGE_NAME:-fast-api-server:latest}
+    ports:
+      - "8009:8009"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${TARGET:-development}
+    environment:
+      POSTGRES_DB_HOST: postgresql
+      APP_RELOAD: "true"
+    volumes:
+      - ./app:/home/appuser/app
+      - ./tests:/home/appuser/tests
+    depends_on:
+      - fast-api-postgres
+    links:
+      - fast-api-postgres:postgresql
+
+  fast-api-postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    #    volumes:
+    #      - .pgdata/:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: fastapi_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres

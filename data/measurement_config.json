@@ -1,0 +1,8 @@
+{
+  "measurement_frequency": 60,
+  "first_measurement": "2023-04-26T08:00:00Z",
+  "rgb_camera": true,
+  "multispectral_camera": false,
+  "number_of_sensors": 1,
+  "length_of_ae": 10
+}
