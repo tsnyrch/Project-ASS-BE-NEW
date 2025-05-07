@@ -43,10 +43,9 @@ class Settings(BaseSettings):
     otel_exporter_otlp_endpoint: str = None
 
     ALLOWED_CORS_ORIGINS: set = [
-        "localhost",
-        "127.0.0.1",
-        "host.docker.internal",
-        "testserver",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://host.docker.internal:5173",
     ]
 
     @property
