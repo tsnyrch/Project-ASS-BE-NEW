@@ -34,7 +34,7 @@ class UserCreateSchema(BaseSchema):
     Schema for creating a new user
     """
     __orm__ = UserOrm
-    __transient_fields__ = ["id", "created_at", "updated_at", "password"]
+    __transient_fields__ = ["id", "created_at", "updated_at"]
 
     first_name: Optional[str] = None
     last_name: Optional[str] = None
