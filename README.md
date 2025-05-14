@@ -13,6 +13,8 @@
  - poetry
  - Python 3.9 or higher
  - PostgreSQL (for local development without Docker)
+ - `boto3` (for AWS S3 integration, add via `poetry add boto3`)
+ - `Pillow` (for image processing, add via `poetry add Pillow`)
 
 ## Best Practices
 
@@ -49,6 +51,7 @@ fast-api-docker-poetry
 │   │   ├── settings.py                  
 │   ├── controllers                           --  api routes by objects
 │   │   ├── order_controller.py 
+│   │   ├── camera_controller.py           --  handles Aravis camera interactions (test, capture)
 │   └── models                                --  orm and pydantic models
 │   │   ├── order.py
 │   │   ├── address.py
@@ -58,6 +61,7 @@ fast-api-docker-poetry
 │   │   ├── order_repository.py
 │   └── services                              --  business logic / data transformation
 │   │   ├── order_service.py
+│   │   ├── cloud_uploader_service.py      --  handles uploading files to cloud storage (e.g., AWS S3)
 │   └── utils
 │   │   ├── db.py
 │   └── main.py
@@ -199,4 +203,44 @@ The API uses OAuth2 password flow for authentication. To authenticate:
     ```
     poetry run alembic upgrade head
     ```
+
+## Key Features
+
+### Camera Control (Aravis Integration)
+
+This application integrates with GenICam compatible cameras using the Aravis library for image acquisition.
+
+- **List and Test Cameras:** 
+  - Endpoint: `GET /camera/test`
+  - Description: Scans for connected Aravis-compatible cameras and returns a list of found devices with their details (ID, model, vendor, serial). Useful for identifying the `device_id` needed for other operations.
+
+- **Capture Image:**
+  - Endpoint: `POST /camera/capture`
+  - Description: Triggers an image capture from a specified (or the first available) Aravis camera.
+  - Query Parameters:
+    - `device_id` (optional, string): The ID of the camera to use (obtained from `/camera/test`). If not provided, the first detected camera is used. It is highly recommended to specify a `device_id` in multi-camera setups or for stable operation.
+  - Response: Returns a JSON object containing:
+    - `status`: \"success\" or \"error\".
+    - `device_id_used`: The ID of the camera from which the image was captured.
+    - `image_base64`: Base64 encoded string of the captured image in PNG format (if successful).
+    - `image_format`: \"png\".
+    - `message` / `error`: Additional information or error details.
+  - Dependencies: Uses Aravis for camera communication and Pillow (PIL) for image processing (conversion to PNG).
+  - Configuration: Camera parameters (pixel format, exposure, gain) are currently set to camera defaults within the controller but can be configured directly in `app/controllers/camera_controller.py` (see `TODO` comments).
+
+### Cloud Uploader Service (AWS S3)
+
+Provides functionality to upload files and entire folders to AWS S3.
+
+- **Service Class:** `app.services.cloud_uploader_service.CloudUploaderService`
+- **Methods:**
+  - `upload_file_to_s3(local_file_path: str, bucket_name: str, s3_object_name: Optional[str] = None) -> bool`:
+    Uploads a single file to the specified S3 bucket.
+  - `upload_folder_to_s3(local_folder_path: str, bucket_name: str, s3_destination_folder: Optional[str] = None) -> dict`:
+    Uploads all files from a local folder (recursively) to the S3 bucket, optionally under a specific destination path in S3.
+- **Configuration & Dependencies:**
+  - Requires the `boto3` library (`poetry add boto3`).
+  - AWS Credentials: The service relies on `boto3` to find AWS credentials. Ensure your environment is configured with `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_DEFAULT_REGION` (e.g., via environment variables or a shared credentials file like `~/.aws/credentials`). **Do not hardcode credentials in the source code.**
+  - S3 Bucket: You must have an existing S3 bucket.
+- **Usage:** This service can be imported and used by other parts of the application (e.g., controllers or other services) to handle file uploads after they are generated or processed.
 
