@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -34,13 +34,13 @@ class MeasurementController:
         self.measurement_service = MeasurementService()
         self.settings_service = SettingsService()
         self.scheduler = CronScheduler.get_instance()
-        
+
         # Register the measurement job with the scheduler
         self.scheduler.register_job(self.start_measurement_logic)
 
     @measurement_router.get(
-        "/measurements/latest", 
-        response_model=MeasurementLatestSchema, 
+        "/measurements/latest",
+        response_model=MeasurementLatestSchema,
         summary="Get latest measurements",
         description="Retrieves the most recent measurement data along with information about the next scheduled measurement"
     )
@@ -49,7 +49,7 @@ class MeasurementController:
     ) -> MeasurementLatestSchema:
         """
         Get the latest measurement data and information about next scheduled measurement.
-        
+
         Returns:
             - Last backup timestamp
             - Last measurement timestamp
@@ -58,13 +58,13 @@ class MeasurementController:
         """
         latest_measurements = await self.measurement_service.get_latest_measurement_info() or []
         planned_measurement = self.scheduler.next_scheduled_date
-        
+
         latest_measurements_schema = [
             MeasurementInfoSchema.from_orm(m) for m in latest_measurements
         ]
-        
+
         last_measurement_date = latest_measurements_schema[0].date_time if latest_measurements_schema else None
-        
+
         return MeasurementLatestSchema(
             last_backup=datetime.now(),  # Placeholder, replace with actual backup information
             last_measurement=last_measurement_date,
@@ -73,8 +73,8 @@ class MeasurementController:
         )
 
     @measurement_router.get(
-        "/measurements/history", 
-        response_model=MeasurementHistorySchema, 
+        "/measurements/history",
+        response_model=MeasurementHistorySchema,
         summary="Get measurement history",
         description="Retrieves the measurement history within a specified date range"
     )
@@ -86,16 +86,16 @@ class MeasurementController:
     ) -> MeasurementHistorySchema:
         """
         Get measurement history within a date range.
-        
+
         Allows filtering measurements by start and end dates to analyze historical data.
-        
+
         Parameters:
             - start_date: The beginning of the date range (ISO format)
             - end_date: The end of the date range (ISO format)
         """
         measurements_history = await self.measurement_service.get_measurement_history(start_date, end_date)
         measurements_schema = [MeasurementInfoSchema.from_orm(m) for m in measurements_history]
-        
+
         return MeasurementHistorySchema(measurements=measurements_schema)
 
     @measurement_router.get(
@@ -109,10 +109,10 @@ class MeasurementController:
     ) -> MeasurementInfoSchema:
         """
         Get a specific measurement by ID.
-        
+
         Retrieves detailed information about a specific measurement identified by its unique ID.
         In a real implementation, this would return the measurement data files.
-        
+
         Parameters:
             - measurement_id: The unique identifier for the measurement
         """
@@ -122,16 +122,16 @@ class MeasurementController:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Measurement not found"
             )
-            
+
         # This is a placeholder for the actual file generation and download
         # In a real implementation, you would generate or retrieve the measurement data files
         # and return them as a downloadable archive
-        
+
         return MeasurementInfoSchema.from_orm(measurement)
 
     @measurement_router.post(
-        "/measurements/start", 
-        response_model=MeasurementStartResponse, 
+        "/measurements/start",
+        response_model=MeasurementStartResponse,
         summary="Start a new measurement",
         description="Manually initiates a new measurement process"
     )
@@ -140,7 +140,7 @@ class MeasurementController:
     ) -> MeasurementStartResponse:
         """
         Start a new measurement manually.
-        
+
         Triggers an immediate measurement using the current configuration settings.
         This endpoint is useful for on-demand measurements outside the regular schedule.
         """
@@ -160,7 +160,7 @@ class MeasurementController:
     async def start_measurement_logic(self, scheduled: bool = False) -> MeasurementInfoSchema:
         """
         Logic for starting a new measurement
-        
+
         Can be called manually or by the scheduler
         """
         logger.info(f"Starting measurement (scheduled: {scheduled})")
@@ -168,33 +168,33 @@ class MeasurementController:
         try:
             # Get current configuration
             config = await self.settings_service.get_measurement_config()
-            
+
             # Create new measurement record
             new_measurement = MeasurementInfoOrm(
-                date_time=datetime.now(),
+                date_time=datetime.now(timezone.utc),
                 rgb_camera=config.rgb_camera,
                 multispectral_camera=config.multispectral_camera,
                 number_of_sensors=config.number_of_sensors,
                 length_of_ae=config.length_of_ae,
                 scheduled=scheduled
             )
-            
+
             saved_measurement = await self.measurement_service.create_measurement(new_measurement)
             logger.info(f"Created measurement with ID: {saved_measurement.id}")
-            
+
             # Start camera measurements if enabled
             if config.rgb_camera:
                 await self.measurement_service.start_rgb_measurement(
                     saved_measurement.id, saved_measurement.date_time, config.length_of_ae
                 )
-                
+
             if config.multispectral_camera:
                 await self.measurement_service.start_multispectral_measurement(
                     saved_measurement.id, saved_measurement.date_time
                 )
-                
+
             return MeasurementInfoSchema.from_orm(saved_measurement)
-            
+
         except Exception as e:
             logger.error(f"Error in measurement logic: {str(e)}")
             raise HTTPException(

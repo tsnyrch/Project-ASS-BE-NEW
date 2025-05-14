@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 class CronScheduler:
     """
     Singleton class for scheduling and managing tasks for measurements
-    
+
     This is a simplified cron-like scheduler that uses asyncio tasks
     """
     _instance = None
@@ -43,16 +43,16 @@ class CronScheduler:
         """
         while True:
             try:
-                now = datetime.now()
+                now = datetime.now(timezone.utc)
                 logger.info(f"Running scheduled measurement at: {now.isoformat()}, interval: {self.minutes_interval} minutes")
-                
+
                 # Update the next scheduled date
-                self.next_scheduled_date = datetime.now() + timedelta(minutes=self.minutes_interval)
-                
+                self.next_scheduled_date = now + timedelta(minutes=self.minutes_interval)
+
                 # Call the registered callback
                 if self.job_callback:
                     await self.job_callback(scheduled=True)
-                
+
                 # Sleep until next run
                 await asyncio.sleep(self.minutes_interval * 60)
             except Exception as e:
@@ -63,7 +63,7 @@ class CronScheduler:
     def set_new_schedule(self, minutes_interval: int, start_time: Optional[datetime] = None):
         """
         Set a new schedule for measurements
-        
+
         Args:
             minutes_interval: The interval between measurements in minutes
             start_time: The time to start the first measurement (defaults to now)
@@ -79,16 +79,21 @@ class CronScheduler:
             return
 
         self.minutes_interval = minutes_interval
-        
-        # If no start time is specified, use current time
+
+        # Use UTC now
+        now = datetime.now(timezone.utc)
+
+        # If no start time is specified, use now + interval
         if start_time is None:
-            start_time = datetime.now()
-            self.next_scheduled_date = start_time + timedelta(minutes=minutes_interval)
+            start_time = now + timedelta(minutes=minutes_interval)
         else:
-            self.next_scheduled_date = start_time
+            # Ensure start_time is timezone-aware
+            if start_time.tzinfo is None or start_time.tzinfo.utcoffset(start_time) is None:
+                start_time = start_time.replace(tzinfo=timezone.utc)
+
+        self.next_scheduled_date = start_time
 
         # Calculate delay until start time
-        now = datetime.now()
         delay = (start_time - now).total_seconds()
         delay = max(0, delay)  # Ensure delay is not negative
 
@@ -97,7 +102,7 @@ class CronScheduler:
             if delay > 0:
                 logger.info(f"Waiting {delay} seconds until first measurement at {start_time.isoformat()}")
                 await asyncio.sleep(delay)
-            
+
             # Start the recurring job
             await self._job_wrapper()
 

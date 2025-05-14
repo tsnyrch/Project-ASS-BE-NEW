@@ -35,7 +35,7 @@ class SettingsRepository:
             "number_of_sensors": 1,
             "length_of_ae": 10  # 10 minutes default
         }
-        
+
         with open(self.measurement_config_path, 'w') as f:
             json.dump(default_config, f, indent=2)
 
@@ -45,16 +45,13 @@ class SettingsRepository:
         """
         with open(self.measurement_config_path, 'r') as f:
             config_data = json.load(f)
-        
+
         return MeasurementConfigSchema(**config_data)
 
     async def update_measurement_config(self, config: MeasurementConfigSchema) -> MeasurementConfigSchema:
         """
         Update the measurement configuration
         """
-        config_dict = config.dict()
-        
         with open(self.measurement_config_path, 'w') as f:
-            json.dump(config_dict, f, indent=2)
-        
+            f.write(config.json(indent=2))  # Pydantic handles datetime properly
         return config

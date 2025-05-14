@@ -48,6 +48,9 @@ class BaseSchema(BaseModel):
 
     class Config:
         orm_mode = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+        }
 
     id: Optional[int] = Field(default=None, read_only=True)
     created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
