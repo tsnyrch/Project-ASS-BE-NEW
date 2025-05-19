@@ -28,6 +28,8 @@ opentelemetry-distro = "^0.39b0"
 opentelemetry-exporter-otlp = "^1.18.0"
 opentelemetry-contrib-instrumentations = "^0.39b0"
 greenlet = "^3.2.1"
+google-api-python-client = "^2.84.0"
+google-auth-oauthlib = "^1.0.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.6.0"

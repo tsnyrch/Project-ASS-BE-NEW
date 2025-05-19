@@ -1,6 +1,6 @@
 services:
   fast-api-docker-poetry:
-    image: ${IMAGE_NAME:-fast-api-server:latest}
+    image: local/fast-api-server:${BUILD_TAG:-local-dev}
     ports:
       - "8009:8009"
     build:
@@ -9,22 +9,33 @@ services:
       target: ${TARGET:-development}
     environment:
       POSTGRES_DB_HOST: postgresql
-      APP_RELOAD: "true"
+      OTEL_SERVICE_NAME: fastApiDockerPoetry
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      SET_JUMBO_MTU: "false"
+      UVICORN_RELOAD: "true"
     volumes:
-      - ./app:/home/appuser/app
-      - ./tests:/home/appuser/tests
+      - ./:/home/appuser
     depends_on:
       - fast-api-postgres
+      - jaeger
     links:
       - fast-api-postgres:postgresql
+      - jaeger:jaeger
 
   fast-api-postgres:
     image: postgres:15-alpine
     ports:
       - "5432:5432"
-    #    volumes:
-    #      - .pgdata/:/var/lib/postgresql/data
     environment:
       POSTGRES_DB: fastapi_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "4317:4317" # OTLP gRPC
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      LOG_LEVEL: "debug"

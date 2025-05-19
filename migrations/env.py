@@ -20,7 +20,7 @@ if config.config_file_name is not None:
 from app.models.base import Base
 # Import all models to ensure they are registered with the Base metadata
 from app.models.user import UserOrm
-from app.models.measurement import MeasurementInfoOrm
+from app.models.measurement import MeasurementInfoOrm, MeasurementConfigOrm
 
 target_metadata = Base.metadata
 

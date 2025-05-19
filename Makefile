@@ -1,12 +1,12 @@
 startd:
-	docker-compose -f docker-compose.local.yml up -d --build \
+	docker-compose --profile tracing up -d --build \
 		&& docker-compose run --rm fast-api-docker-poetry poetry run alembic upgrade head
 
 stopd:
-	docker-compose -f docker-compose.local.yml down
+	docker-compose down
 
 startslimd:
-	docker-compose up -d --build \
+	docker-compose --profile default up -d --build \
 		&& docker-compose run --rm fast-api-docker-poetry poetry run alembic upgrade head
 
 testd:
@@ -14,17 +14,17 @@ testd:
 		&& docker-compose run --rm fast-api-docker-poetry poetry run pytest -v --durations=10 --durations-min=0.5
 
 startp:
-	docker-compose up fast-api-postgres -d --build \
+	docker-compose up fast-api-postgres -d \
 	&& poetry run alembic upgrade head \
 	&& poetry run python -m app.main
 
 testp:
-	docker-compose up fast-api-postgres -d --build \
+	docker-compose up fast-api-postgres -d \
 	&& poetry run pytest -v --durations=10 --durations-min=0.5
 
-create-migration: ## Create an alembic migration
+create-migration:
 	@read -p "Enter rev id: " message; \
 	poetry run alembic revision --autogenerate --rev-id "$$message"
 
-#formatp:
-#	poetry run black app tests
+create-admin-user:
+	docker-compose run --rm fast-api-docker-poetry python create_admin.py

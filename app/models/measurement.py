@@ -19,10 +19,26 @@ class MeasurementInfoOrm(BaseOrm):
     scheduled = Column(Boolean, default=False, nullable=False)
 
 
+class MeasurementConfigOrm(BaseOrm):
+    """
+    Model representing measurement configuration stored in the database
+    """
+    __tablename__ = "measurement_config"
+
+    measurement_frequency = Column(Integer, nullable=False, default=60)
+    first_measurement = Column(DateTime(timezone=True), nullable=False)
+    rgb_camera = Column(Boolean, default=False, nullable=False)
+    multispectral_camera = Column(Boolean, default=False, nullable=False)
+    number_of_sensors = Column(Integer, nullable=False, default=1)
+    length_of_ae = Column(Float, nullable=False, default=10)
+
+
 class MeasurementConfigSchema(BaseSchema):
     """
     Schema for measurement configuration
     """
+    __orm__ = MeasurementConfigOrm
+    
     measurement_frequency: int
     first_measurement: datetime
     rgb_camera: bool = False

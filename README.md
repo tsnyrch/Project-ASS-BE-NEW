@@ -45,7 +45,7 @@
 ## File structure
 ```
 fast-api-docker-poetry 
-├── app
+├── app                                       --  main application code directory
 │   ├── config                                --  app configs
 │   │   ├── exception_handlers.py        
 │   │   ├── settings.py                  
@@ -82,8 +82,8 @@ fast-api-docker-poetry
 
 1. Install required software:
    - Docker and Docker Compose for containerized deployment
-   - Poetry for Python dependency management
-   - Python 3.9 or higher
+   - Poetry for Python dependency management (for local development)
+   - Python 3.9 or higher (for local development)
 
 2. Clone the repository and navigate to the project directory:
    ```bash
@@ -91,12 +91,27 @@ fast-api-docker-poetry
    cd ass-api
    ```
 
+### Docker Configuration
+
+The application is configured to run in Docker with the following features:
+
+1. **Volume Mounting**: The entire project directory is mounted into the container, allowing for real-time code changes without rebuilding the image.
+
+2. **Profiles**:
+   - `default`: Runs the API and PostgreSQL
+   - `tracing`: Adds Jaeger for observability
+
+3. **Environment Variables**:
+   - `SET_JUMBO_MTU`: Set to "true" to enable jumbo packet MTU (9000) for camera operations that require high bandwidth
+   - `APP_RELOAD`: Set to "true" to enable auto-reload for development
+   - `OTEL_SERVICE_NAME`: Service name for OpenTelemetry tracing
+
 ### Database Setup
 
 1. **Using Docker (recommended)**:
    ```bash
    # Start PostgreSQL container
-   docker-compose -f docker-compose.local.yml up fast-api-postgres -d
+   docker-compose up fast-api-postgres -d
    ```
 
 2. **Local PostgreSQL**:
@@ -125,11 +140,15 @@ fast-api-docker-poetry
 
 1. **Full stack with Jaeger tracing**:
    ```bash
+   docker-compose --profile tracing up
+   # Or using make
    make startd
    ```
 
 2. **Without tracing**:
    ```bash
+   docker-compose up
+   # Or using make
    make startslimd
    ```
 

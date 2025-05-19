@@ -1,6 +1,6 @@
 from typing import Optional, List
 
-from app.models.user import UserOrm, UserCreateSchema, UserResponseSchema
+from app.models.user import UserOrm, UserCreateSchema
 from app.repository.user_repository import UserRepository
 
 
@@ -8,6 +8,7 @@ class UserService:
     """
     Service for user management operations
     """
+
     def __init__(self):
         self.user_repo: UserRepository = UserRepository()
 
@@ -56,3 +57,22 @@ class UserService:
         Delete refresh token for a user
         """
         await self.user_repo.delete_user_refresh_token(user_id)
+
+    async def delete_user(self, user_id: int) -> bool:
+        """
+        Delete a user by ID
+
+        Args:
+            user_id: The ID of the user to delete
+
+        Returns:
+            bool: True if the user was successfully deleted, False if user not found
+        """
+        # Check if user exists
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            return False
+
+        # Delete the user
+        await self.user_repo.delete_by_id(user_id)
+        return True

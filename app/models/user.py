@@ -1,7 +1,8 @@
 from typing import Optional
-from sqlalchemy import Column, String, Boolean, Text
-from pydantic import Field, validator
+
 from passlib.context import CryptContext
+from pydantic import BaseModel, validator
+from sqlalchemy import Boolean, Column, String, Text
 
 from app.models.base import BaseOrm, BaseSchema
 
@@ -13,6 +14,7 @@ class UserOrm(BaseOrm):
     """
     User model representing application users with authentication
     """
+
     __tablename__ = "users"
 
     first_name = Column(String(50), nullable=True)
@@ -33,6 +35,7 @@ class UserCreateSchema(BaseSchema):
     """
     Schema for creating a new user
     """
+
     __orm__ = UserOrm
     __transient_fields__ = ["id", "created_at", "updated_at"]
 
@@ -42,10 +45,10 @@ class UserCreateSchema(BaseSchema):
     password: str
     is_admin: bool = False
 
-    @validator('user_name')
+    @validator("user_name")
     def validate_username(cls, v):
         if len(v) < 3:
-            raise ValueError('Username must be at least 3 characters')
+            raise ValueError("Username must be at least 3 characters")
         return v
 
 
@@ -53,6 +56,7 @@ class UserResponseSchema(BaseSchema):
     """
     Schema for user response data (excludes password)
     """
+
     __orm__ = UserOrm
 
     first_name: Optional[str] = None
@@ -65,14 +69,16 @@ class UserLoginSchema(BaseSchema):
     """
     Schema for user login requests
     """
+
     user_name: str
     password: str
 
 
-class TokenSchema(BaseSchema):
+class TokenSchema(BaseModel):
     """
     Schema for authentication tokens
     """
+
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
@@ -82,6 +88,7 @@ class TokenPayloadSchema(BaseSchema):
     """
     Schema for JWT token payload
     """
+
     id: int
     user_name: str
     first_name: Optional[str] = None
@@ -92,5 +99,6 @@ class RefreshTokenSchema(BaseSchema):
     """
     Schema for refresh token requests
     """
+
     user_name: str
     refresh_token: str

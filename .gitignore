@@ -96,3 +96,6 @@ test_results*
 # Terraform
 /infrastructure/.terraform/
 /infrastructure/shared/.terraform/
+
+# Exclude keys folder
+keys/

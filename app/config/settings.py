@@ -1,6 +1,7 @@
+import os
 from enum import Enum
 from functools import lru_cache
-from typing import Mapping, Any
+from typing import Mapping, Any, Optional
 
 from pydantic import BaseSettings, validator
 from uvicorn.config import LOG_LEVELS
@@ -10,6 +11,14 @@ class Environment(Enum):
     localdev: str = "localdev"
     dev: str = "dev"
     prod: str = "prod"
+
+
+class GoogleDriveSettings(BaseSettings):
+    credentials_path: str = "keys/erudite-scholar-447111-m6-d346e2fd7c8f.json"
+    default_upload_path: str = "/test/files"
+    
+    class Config:
+        env_prefix = "GOOGLE_DRIVE_"
 
 
 class DatabaseSettings(BaseSettings):
@@ -79,3 +88,8 @@ def get_settings():
 @lru_cache()
 def get_database_settings() -> DatabaseSettings:
     return DatabaseSettings()
+
+
+@lru_cache()
+def get_google_drive_settings() -> GoogleDriveSettings:
+    return GoogleDriveSettings()

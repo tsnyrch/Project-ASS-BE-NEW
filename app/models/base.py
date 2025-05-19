@@ -2,10 +2,8 @@ from datetime import datetime
 from typing import Optional
 
 import sqlalchemy as sa
-from pydantic import BaseModel
-from pydantic import Field
-from sqlalchemy import Column, DateTime, BigInteger
-from sqlalchemy import MetaData
+from pydantic import BaseModel, Field
+from sqlalchemy import BigInteger, Column, DateTime, MetaData
 from sqlalchemy.orm import declarative_base
 
 """
@@ -33,7 +31,11 @@ class BaseOrm(Base):
     __table_args__ = {"extend_existing": True}
 
     id = Column(BigInteger, primary_key=True, autoincrement=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=sa.text("CURRENT_TIMESTAMP"),
+        nullable=False,
+    )
     updated_at = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -63,18 +65,30 @@ class BaseSchema(BaseModel):
         orm = self.__orm__()
 
         def set_val(key, data):
-            if (isinstance(data, BaseOrm) or isinstance(data, list)) and key not in self.__transient_fields__:
+            if (
+                isinstance(data, BaseOrm) or isinstance(data, list)
+            ) and key not in self.__transient_fields__:
                 setattr(orm, key, data)
             else:
                 for key, value in data:
                     try:
                         if isinstance(value, list):
-                            set_val(key, [item.to_orm() for item in value if isinstance(item, BaseSchema)])
-                        elif isinstance(value, BaseSchema) and key not in self.__transient_fields__:
+                            set_val(
+                                key,
+                                [
+                                    item.to_orm()
+                                    for item in value
+                                    if isinstance(item, BaseSchema)
+                                ],
+                            )
+                        elif (
+                            isinstance(value, BaseSchema)
+                            and key not in self.__transient_fields__
+                        ):
                             setattr(orm, key, value.to_orm())
                         elif value is not None and key not in self.__transient_fields__:
                             setattr(orm, key, value)
-                    except AttributeError as e:
+                    except AttributeError:
                         pass
 
         set_val(None, self)

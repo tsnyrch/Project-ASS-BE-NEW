@@ -15,7 +15,11 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Create router
-camera_router = APIRouter()
+camera_router = APIRouter(
+    prefix="/camera",
+    tags=["camera"],
+    responses={404: {"description": "Not found"}}
+)
 
 class CameraDeviceInfo(BaseModel):
     index: int
@@ -50,7 +54,7 @@ class CameraController:
         pass
 
     @camera_router.get(
-        "/camera/test", 
+        "/test", 
         response_model=CameraTestResponse, 
         summary="Test Aravis camera connectivity",
         description="Tests the connection to Aravis cameras and returns detailed information about all connected devices"
@@ -112,7 +116,7 @@ class CameraController:
             raise HTTPException(status_code=500, detail=f"Camera test failed: {str(e)}")
 
     @camera_router.get(
-        "/camera/health", 
+        "/health", 
         response_model=CameraHealthResponse,
         summary="Check camera system health",
         description="Performs a basic health check of the camera system"
@@ -130,7 +134,7 @@ class CameraController:
         )
 
     @camera_router.post(
-        "/camera/capture",
+        "/capture",
         response_model=CaptureImageResponse,
         summary="Capture an image from an Aravis camera",
         description="Connects to an Aravis-compatible camera, captures a single frame, and returns it as a base64 encoded PNG.",

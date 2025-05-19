@@ -3,7 +3,10 @@ from fastapi.responses import JSONResponse
 from fastapi_restful.cbv import cbv
 from pydantic import BaseModel
 
-system_router = APIRouter()
+system_router = APIRouter(
+    tags=["system"],
+    responses={404: {"description": "Not found"}}
+)
 
 class HealthCheckResponse(BaseModel):
     status: str

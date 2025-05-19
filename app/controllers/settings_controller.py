@@ -12,7 +12,11 @@ from app.services.settings_service import SettingsService
 logger = logging.getLogger(__name__)
 
 # Create router
-settings_router = APIRouter()
+settings_router = APIRouter(
+    prefix="/settings",
+    tags=["settings"],
+    responses={404: {"description": "Not found"}}
+)
 
 class ConfigUpdateResponse(BaseModel):
     success: bool
@@ -28,7 +32,7 @@ class SettingsController:
         self.settings_service = SettingsService()
 
     @settings_router.get(
-        "/settings/measurement-config", 
+        "/measurement-config", 
         response_model=MeasurementConfigSchema, 
         summary="Get measurement configuration",
         description="Retrieves the current measurement configuration settings"
@@ -45,7 +49,7 @@ class SettingsController:
         return await self.settings_service.get_measurement_config()
 
     @settings_router.put(
-        "/settings/measurement-config", 
+        "/measurement-config", 
         response_model=ConfigUpdateResponse, 
         summary="Update measurement configuration",
         description="Updates the measurement configuration with new settings"

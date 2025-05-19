@@ -33,6 +33,9 @@ class SettingsService:
         if old_config.first_measurement.tzinfo is None:
             old_config.first_measurement = old_config.first_measurement.replace(tzinfo=timezone.utc)
 
+        # First update config in repository to get an ID
+        updated_config = await self.settings_repo.update_measurement_config(config)
+
         # Update scheduler if frequency or first measurement changed
         if (
                 config.measurement_frequency != old_config.measurement_frequency or
@@ -41,8 +44,8 @@ class SettingsService:
             scheduler = CronScheduler.get_instance()
             scheduler.set_new_schedule(
                 config.measurement_frequency,
-                config.first_measurement
+                config.first_measurement,
+                updated_config.id  # Pass the config ID to track changes
             )
 
-        # Update config in repository
-        return await self.settings_repo.update_measurement_config(config)
+        return updated_config
