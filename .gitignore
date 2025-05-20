@@ -99,3 +99,4 @@ test_results*
 
 # Exclude keys folder
 keys/
+.vscode/

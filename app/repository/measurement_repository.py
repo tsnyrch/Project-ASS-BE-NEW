@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional
 
 from sqlalchemy import select, between, desc
 
-from app.models.measurement import MeasurementInfoOrm
+from app.models.measurement import MeasurementInfoOrm, MeasurementInfoSchema
 from app.models.pageable import PageRequestSchema
 from app.repository.base_repository import BaseRepository
 from app.utils.db_session import get_db_session
@@ -13,6 +13,7 @@ class MeasurementRepository(BaseRepository):
     """
     Repository for measurement operations
     """
+
     def __init__(self):
         super().__init__(MeasurementInfoOrm)
 
@@ -43,21 +44,32 @@ class MeasurementRepository(BaseRepository):
             )
             return result.scalars().all()
 
-    async def get_measurement_by_id(self, measurement_id: int) -> Optional[MeasurementInfoOrm]:
+    async def get_measurement_by_id(
+        self, measurement_id: int
+    ) -> Optional[MeasurementInfoOrm]:
         """
         Get a measurement by ID
         """
         async with get_db_session() as session:
             result = await session.execute(
-                select(MeasurementInfoOrm).where(MeasurementInfoOrm.id == measurement_id)
+                select(MeasurementInfoOrm).where(
+                    MeasurementInfoOrm.id == measurement_id
+                )
             )
             return result.scalars().first()
 
-    async def save_new_measurement(self, measurement: MeasurementInfoOrm) -> MeasurementInfoOrm:
+    async def save_new_measurement(
+        self, measurement: MeasurementInfoOrm
+    ) -> "MeasurementInfoSchema":
         """
-        Save a new measurement
+        Save a new measurement and return as schema
         """
-        return await self.save(measurement)
+        async with get_db_session() as session:
+            session.add(measurement)
+            # Commit happens automatically when context manager exits
+            await session.flush()  # Ensure the object has an ID
+            await session.refresh(measurement)
+            return MeasurementInfoSchema.from_orm(measurement)
 
     async def delete_measurement(self, measurement: MeasurementInfoOrm) -> None:
         """

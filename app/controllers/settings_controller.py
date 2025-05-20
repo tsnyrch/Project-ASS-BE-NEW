@@ -7,6 +7,7 @@ from app.middleware.auth import get_current_user
 from app.models.measurement import MeasurementConfigSchema
 from app.models.user import TokenPayloadSchema
 from app.services.settings_service import SettingsService
+from app.services.cron_scheduler import CronScheduler
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -32,8 +33,8 @@ class SettingsController:
         self.settings_service = SettingsService()
 
     @settings_router.get(
-        "/measurement-config", 
-        response_model=MeasurementConfigSchema, 
+        "/measurement-config",
+        response_model=MeasurementConfigSchema,
         summary="Get measurement configuration",
         description="Retrieves the current measurement configuration settings"
     )
@@ -42,29 +43,30 @@ class SettingsController:
     ) -> MeasurementConfigSchema:
         """
         Get the current measurement configuration.
-        
+
         Returns all settings related to the measurement process including frequencies,
         camera options, and sensor configurations.
         """
         return await self.settings_service.get_measurement_config()
 
     @settings_router.put(
-        "/measurement-config", 
-        response_model=ConfigUpdateResponse, 
+        "/measurement-config",
+        response_model=ConfigUpdateResponse,
         summary="Update measurement configuration",
-        description="Updates the measurement configuration with new settings"
+        description="Updates the existing measurement configuration with new settings"
     )
     async def update_measurement_config(
-        self, 
+        self,
         config: MeasurementConfigSchema,
         current_user: TokenPayloadSchema = Depends(get_current_user)
     ) -> ConfigUpdateResponse:
         """
         Update the measurement configuration.
-        
+
+        Modifies the existing configuration record with new values instead of creating a new one.
         Allows changing settings like measurement frequency, camera options, and sensor configurations.
         Performs validation to ensure the configuration is valid before applying changes.
-        
+
         Requirements:
           - Measurement frequency must be greater than the length of AE
           - Currently the multispectral camera functionality is disabled
@@ -76,20 +78,24 @@ class SettingsController:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Measurement frequency must be greater than length of AE"
                 )
-                
-            # For multispectral camera functionality (this matches the TypeScript implementation)
-            # TODO: Enable this when multispectral camera is functional
-            config.multispectral_camera = False
-            
-            # Update configuration
+
+            # Update the existing configuration
             updated_config = await self.settings_service.update_measurement_config(config)
-            
+
+            # Reinitialize the scheduler with the new configuration
+            scheduler = CronScheduler.get_instance()
+            scheduler.set_new_schedule(
+                updated_config.measurement_frequency,
+                updated_config.first_measurement,
+                updated_config.id
+            )
+
             return ConfigUpdateResponse(
                 success=True,
-                message="Configuration updated successfully",
+                message="Configuration updated successfully (existing record modified)",
                 config=updated_config
             )
-            
+
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

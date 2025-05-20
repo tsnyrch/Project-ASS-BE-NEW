@@ -1,7 +1,8 @@
 import io
 import logging
+import zipfile
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Union, List
 
 from fastapi import (
     APIRouter,
@@ -20,11 +21,13 @@ from pydantic import BaseModel
 from app.middleware.auth import get_current_user
 from app.models.measurement import (
     MeasurementConfigSchema,
+    MeasurementConfigCreateSchema,
     MeasurementHistorySchema,
     MeasurementInfoOrm,
     MeasurementInfoSchema,
     MeasurementLatestSchema,
 )
+from app.models.measurement_file import MeasurementFileSchema
 from app.models.user import TokenPayloadSchema
 from app.services.cron_scheduler import CronScheduler
 from app.services.google_drive_service import GoogleDriveService
@@ -92,13 +95,27 @@ class MeasurementController:
             - Latest measurement data
         """
         latest_measurements = (
-            await self.measurement_service.get_latest_measurement_info() or []
+            await self.measurement_service.get_latest_measurements_with_files() or []
         )
         planned_measurement = self.scheduler.next_scheduled_date
 
-        latest_measurements_schema = [
-            MeasurementInfoSchema.from_orm(m) for m in latest_measurements
-        ]
+        # Convert to schema with files
+        latest_measurements_schema = []
+        for m in latest_measurements:
+            schema = MeasurementInfoSchema.from_orm(m)
+            if hasattr(m, 'files') and m.files:
+                schema.files = []
+                for file in m.files:
+                    file_schema = MeasurementFileSchema.from_orm(file)
+                    schema.files.append({
+                        "id": file_schema.id,
+                        "name": file_schema.name,
+                        "google_drive_file_id": file_schema.google_drive_file_id,
+                        "measurement_id": file_schema.measurement_id,
+                        "created_at": file_schema.created_at,
+                        "updated_at": file_schema.updated_at
+                    })
+            latest_measurements_schema.append(schema)
 
         last_measurement_date = (
             latest_measurements_schema[0].date_time
@@ -138,12 +155,26 @@ class MeasurementController:
             - start_date: The beginning of the date range (ISO format)
             - end_date: The end of the date range (ISO format)
         """
-        measurements_history = await self.measurement_service.get_measurement_history(
+        measurements_history = await self.measurement_service.get_measurement_history_with_files(
             start_date, end_date
         )
-        measurements_schema = [
-            MeasurementInfoSchema.from_orm(m) for m in measurements_history
-        ]
+        # Convert to schema with files
+        measurements_schema = []
+        for m in measurements_history:
+            schema = MeasurementInfoSchema.from_orm(m)
+            if hasattr(m, 'files') and m.files:
+                schema.files = []
+                for file in m.files:
+                    file_schema = MeasurementFileSchema.from_orm(file)
+                    schema.files.append({
+                        "id": file_schema.id,
+                        "name": file_schema.name,
+                        "google_drive_file_id": file_schema.google_drive_file_id,
+                        "measurement_id": file_schema.measurement_id,
+                        "created_at": file_schema.created_at,
+                        "updated_at": file_schema.updated_at
+                    })
+            measurements_schema.append(schema)
 
         return MeasurementHistorySchema(measurements=measurements_schema)
 
@@ -162,104 +193,80 @@ class MeasurementController:
         Get a specific measurement by ID.
 
         Retrieves detailed information about a specific measurement identified by its unique ID.
-        In a real implementation, this would return the measurement data files.
+        Includes a list of associated measurement files.
 
         Parameters:
             - measurement_id: The unique identifier for the measurement
         """
-        measurement = await self.measurement_service.get_measurement(measurement_id)
+        measurement = await self.measurement_service.get_measurement_with_files(measurement_id)
         if not measurement:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Measurement not found"
             )
 
-        # This is a placeholder for the actual file generation and download
-        # In a real implementation, you would generate or retrieve the measurement data files
-        # and return them as a downloadable archive
+        # Convert to schema with files
+        schema = MeasurementInfoSchema.from_orm(measurement)
+        if hasattr(measurement, 'files') and measurement.files:
+            schema.files = []
+            for file in measurement.files:
+                file_schema = MeasurementFileSchema.from_orm(file)
+                schema.files.append({
+                    "id": file_schema.id,
+                    "name": file_schema.name,
+                    "google_drive_file_id": file_schema.google_drive_file_id,
+                    "measurement_id": file_schema.measurement_id,
+                    "created_at": file_schema.created_at,
+                    "updated_at": file_schema.updated_at
+                })
+        return schema
 
-        return MeasurementInfoSchema.from_orm(measurement)
 
-    @measurement_router.post(
-        "/upload-to-drive",
-        response_model=FileUploadResponse,
-        summary="Upload a file to Google Drive",
-        description="Uploads a file to Google Drive in the /test/files/ directory",
-        tags=["google-drive"],
+
+    @measurement_router.get(
+        "/{measurement_id}/download-all",
+        summary="Download all files for measurement as ZIP",
+        description="Downloads and packages all files for a measurement into a single ZIP archive",
     )
-    async def upload_file_to_drive(
+    async def download_all_measurement_files(
         self,
-        file: UploadFile = File(...),
-        current_user: TokenPayloadSchema = Depends(get_current_user),
-    ) -> FileUploadResponse:
-        """
-        Upload a file to Google Drive.
-
-        This endpoint uploads a file to Google Drive in the /test/files/ directory.
-
-        Parameters:
-            - file: The file to upload
-        """
-        try:
-            logger.info(f"Starting Google Drive upload for file: {file.filename}")
-
-            # Authenticate with Google Drive
-            if not self.google_drive_service.ensure_authenticated():
-                logger.error("Failed to authenticate with Google Drive")
-                return FileUploadResponse(
-                    success=False, message="Failed to authenticate with Google Drive"
-                )
-
-            # Read the file content
-            file_content = await file.read()
-
-            # Upload the file to Google Drive
-            file_id = self.google_drive_service.upload_file_to_path(
-                file_content=file_content,
-                file_name=file.filename,
-                folder_path="/test/files",
-                mime_type=file.content_type,
-            )
-
-            if not file_id:
-                return FileUploadResponse(
-                    success=False, message="Failed to upload file to Google Drive"
-                )
-
-            return FileUploadResponse(
-                success=True,
-                message=f"File '{file.filename}' uploaded successfully to Google Drive",
-                file_id=file_id,
-            )
-
-        except Exception as e:
-            logger.error(f"Error uploading file to Google Drive: {e}")
-            return FileUploadResponse(
-                success=False, message=f"Failed to upload file: {str(e)}"
-            )
-
-    @measurement_router.post(
-        "/download-from-drive",
-        summary="Download a file from Google Drive",
-        description="Downloads a file from Google Drive by file ID",
-        tags=["google-drive"],
-    )
-    async def download_file_from_drive(
-        self,
-        request: FileDownloadRequest = Body(...),
+        measurement_id: int,
         current_user: TokenPayloadSchema = Depends(get_current_user),
     ):
         """
-        Download a file from Google Drive by its ID.
+        Download all files for a measurement as a ZIP archive.
 
-        This endpoint downloads a file from Google Drive using the provided file ID.
+        This endpoint fetches all files associated with a measurement from Google Drive,
+        packages them into a ZIP archive, and returns the archive as a response.
 
         Parameters:
-            - file_id: The ID of the file to download
+            - measurement_id: ID of the measurement to download files for
         """
         try:
             logger.info(
-                f"Starting Google Drive download for file ID: {request.file_id}"
+                f"Starting download of all files for Measurement ID: {measurement_id}"
             )
+
+            # Get measurement to verify it exists
+            measurement = await self.measurement_service.get_measurement(measurement_id)
+            if not measurement:
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "success": False,
+                        "message": f"Measurement with ID {measurement_id} not found",
+                    },
+                )
+
+            # Get all files for this measurement
+            files = await self.measurement_service.get_measurement_files(measurement_id)
+            if not files:
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "success": False,
+                        "message": f"No files found for measurement ID {measurement_id}",
+                    },
+                )
 
             # Authenticate with Google Drive
             if not self.google_drive_service.ensure_authenticated():
@@ -272,45 +279,41 @@ class MeasurementController:
                     },
                 )
 
-            # Get file metadata
-            file_metadata = self.google_drive_service.get_file_metadata(request.file_id)
-            if not file_metadata:
-                return JSONResponse(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    content={
-                        "success": False,
-                        "message": f"File with ID {request.file_id} not found",
-                    },
-                )
+            # Create in-memory ZIP file
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+                # Download each file and add to ZIP
+                for file in files:
+                    try:
+                        # Download file content from Google Drive
+                        file_content = self.google_drive_service.download_file(file.google_drive_file_id)
+                        if file_content:
+                            # Add to ZIP archive
+                            zip_file.writestr(file.name, file_content)
+                        else:
+                            logger.warning(f"Failed to download file {file.name} (ID: {file.google_drive_file_id})")
+                    except Exception as e:
+                        logger.error(f"Error downloading file {file.name}: {str(e)}")
+                        # Continue with other files even if one fails
 
-            # Download the file
-            file_content = self.google_drive_service.download_file(request.file_id)
-            if not file_content:
-                return JSONResponse(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    content={
-                        "success": False,
-                        "message": "Failed to download file from Google Drive",
-                    },
-                )
-
-            # Return the file as a streaming response
-            file_name = file_metadata.get("name", "downloaded_file")
-            mime_type = file_metadata.get("mimeType", "application/octet-stream")
+            # Prepare response
+            zip_buffer.seek(0)
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            zip_filename = f"measurement_{measurement_id}_{timestamp}.zip"
 
             return StreamingResponse(
-                io.BytesIO(file_content),
-                media_type=mime_type,
-                headers={"Content-Disposition": f"attachment; filename={file_name}"},
+                zip_buffer,
+                media_type="application/zip",
+                headers={"Content-Disposition": f"attachment; filename={zip_filename}"}
             )
 
         except Exception as e:
-            logger.error(f"Error downloading file from Google Drive: {e}")
+            logger.error(f"Error downloading measurement files: {e}")
             return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 content={
                     "success": False,
-                    "message": f"Failed to download file: {str(e)}",
+                    "message": f"Failed to download measurement files: {str(e)}",
                 },
             )
 
@@ -318,21 +321,21 @@ class MeasurementController:
         "/start",
         response_model=MeasurementStartResponse,
         summary="Start a new measurement",
-        description="Manually initiates a new measurement process with optional configuration",
+        description="Manually initiates a new measurement process with required configuration",
     )
     async def start_measurement(
-        self, 
-        config: Optional[MeasurementConfigSchema] = Body(None),
+        self,
+        config: MeasurementConfigCreateSchema = Body(...),
         current_user: TokenPayloadSchema = Depends(get_current_user)
     ) -> MeasurementStartResponse:
         """
         Start a new measurement manually.
 
-        Triggers an immediate measurement using the provided configuration settings or the current settings if none are provided.
+        Triggers an immediate measurement using the provided configuration settings.
         This endpoint is useful for on-demand measurements outside the regular schedule.
-    
+
         Parameters:
-            - config: Optional measurement configuration to use for this measurement
+            - config: Required measurement configuration to use for this measurement
         """
         try:
             measurement = await self.start_measurement_logic(scheduled=False, config=config)
@@ -347,7 +350,7 @@ class MeasurementController:
             )
 
     async def start_measurement_logic(
-        self, scheduled: bool = False, config: Optional[MeasurementConfigSchema] = None
+        self, scheduled: bool = False, config: Union[MeasurementConfigSchema, MeasurementConfigCreateSchema] = None
     ) -> MeasurementInfoSchema:
         """
         Logic for starting a new measurement
@@ -356,14 +359,16 @@ class MeasurementController:
 
         Parameters:
             - scheduled: Whether this is a scheduled measurement or manually triggered
-            - config: Optional configuration to use for this measurement instead of the stored config
+            - config: Configuration to use for this measurement (required for manual measurements, optional for scheduled)
         """
         logger.info(f"Starting measurement (scheduled: {scheduled})")
 
         try:
             # Get configuration - use provided config or fetch current configuration
-            if config is None:
+            if config is None and scheduled:
                 config = await self.settings_service.get_measurement_config()
+            elif config is None:
+                raise ValueError("Configuration is required for manual measurements")
 
             # Create new measurement record
             new_measurement = MeasurementInfoOrm(
@@ -380,20 +385,57 @@ class MeasurementController:
             )
             logger.info(f"Created measurement with ID: {saved_measurement.id}")
 
-            # Start camera measurements if enabled
-            if config.rgb_camera:
-                await self.measurement_service.start_rgb_measurement(
-                    saved_measurement.id,
-                    saved_measurement.date_time,
-                    config.length_of_ae,
-                )
+            # No need to manually initialize files list anymore
 
-            if config.multispectral_camera:
-                await self.measurement_service.start_multispectral_measurement(
-                    saved_measurement.id, saved_measurement.date_time
-                )
+            # For scheduled measurements or when using full config schema
+            if isinstance(config, MeasurementConfigSchema):
+                # Use our new comprehensive method that handles cameras and files
+                measurement = await self.measurement_service.start_measurement_by_config(config)
+                if measurement:
+                    schema = MeasurementInfoSchema.from_orm(measurement)
+                    if hasattr(measurement, 'files') and measurement.files:
+                        schema.files = []
+                        for file in measurement.files:
+                            file_schema = MeasurementFileSchema.from_orm(file)
+                            schema.files.append({
+                                "id": file_schema.id,
+                                "name": file_schema.name,
+                                "google_drive_file_id": file_schema.google_drive_file_id,
+                                "measurement_id": file_schema.measurement_id,
+                                "created_at": file_schema.created_at,
+                                "updated_at": file_schema.updated_at
+                            })
+                    return schema
 
-            return MeasurementInfoSchema.from_orm(saved_measurement)
+            # Otherwise use the traditional approach for backwards compatibility
+            else:
+                # Start camera measurements if enabled
+                if config.rgb_camera:
+                    await self.measurement_service.start_rgb_measurement(
+                        saved_measurement.id,
+                        saved_measurement.date_time,
+                        config.length_of_ae,
+                    )
+
+                if config.multispectral_camera:
+                    await self.measurement_service.start_multispectral_measurement(
+                        saved_measurement.id, saved_measurement.date_time
+                    )
+
+            schema = MeasurementInfoSchema.from_orm(saved_measurement)
+            if hasattr(saved_measurement, 'files') and saved_measurement.files:
+                schema.files = []
+                for file in saved_measurement.files:
+                    file_schema = MeasurementFileSchema.from_orm(file)
+                    schema.files.append({
+                        "id": file_schema.id,
+                        "name": file_schema.name,
+                        "google_drive_file_id": file_schema.google_drive_file_id,
+                        "measurement_id": file_schema.measurement_id,
+                        "created_at": file_schema.created_at,
+                        "updated_at": file_schema.updated_at
+                    })
+            return schema
 
         except Exception as e:
             logger.error(f"Error in measurement logic: {str(e)}")

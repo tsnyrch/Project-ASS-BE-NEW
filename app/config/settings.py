@@ -1,7 +1,5 @@
-import os
 from enum import Enum
 from functools import lru_cache
-from typing import Mapping, Any, Optional
 
 from pydantic import BaseSettings, validator
 from uvicorn.config import LOG_LEVELS
@@ -16,7 +14,7 @@ class Environment(Enum):
 class GoogleDriveSettings(BaseSettings):
     credentials_path: str = "keys/erudite-scholar-447111-m6-d346e2fd7c8f.json"
     default_upload_path: str = "/test/files"
-    
+
     class Config:
         env_prefix = "GOOGLE_DRIVE_"
 
@@ -46,10 +44,7 @@ class Settings(BaseSettings):
     port: int = int("8009")
     host: str = "0.0.0.0"
     log_level: str = "debug"
-    app_reload: bool = False
-    db_retry_window_seconds: int = 60
-    otel_service_name: str = None
-    otel_exporter_otlp_endpoint: str = None
+    app_reload: bool = True
 
     ALLOWED_CORS_ORIGINS: set = [
         "http://localhost:5173",
@@ -69,11 +64,6 @@ class Settings(BaseSettings):
         if level not in LOG_LEVELS.keys():
             raise ValueError(f"log_level must be one of {LOG_LEVELS.keys()}")
         return level
-
-    @validator("db_retry_window_seconds")
-    def init_db_retry_window_seconds(cls, v: int, values: Mapping[str, Any]) -> int:  # noqa
-        if values["environment"] == Environment.localdev:
-            return 1
 
     @property
     def is_local_dev(self) -> bool:

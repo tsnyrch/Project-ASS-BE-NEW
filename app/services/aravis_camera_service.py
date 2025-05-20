@@ -7,6 +7,15 @@ import gi
 import numpy as np
 from PIL import Image
 
+# Set up Aravis environment variables and import
+# os.environ["GI_TYPELIB_PATH"] = (
+#     "/usr/local/lib/x86_64-linux-gnu/girepository-1.0:/usr/lib/aarch64-linux-gnu/girepository-1.0"
+# )
+# os.environ["LD_LIBRARY_PATH"] = (
+#     "/usr/local/lib/x86_64-linux-gnu:/usr/local/lib:"
+#     + os.environ.get("LD_LIBRARY_PATH", "")
+# )
+
 # Load Aravis library
 gi.require_version("Aravis", "0.10")
 from gi.repository import Aravis  # noqa: E402
@@ -419,31 +428,3 @@ class AravisCameraService:
         self._cleanup_acquisition()
         self.camera = None
         self.stream = None
-
-
-# Example usage
-def example():
-    # Create camera service
-    camera_service = AravisCameraService()
-
-    # Connect to camera
-    if not camera_service.connect():
-        print("Failed to connect to camera")
-        return
-
-    # Save image to file
-    if camera_service.save_image_file("captured_image.png"):
-        print("Image saved successfully")
-
-    # Get image as blob
-    image_blob = camera_service.get_image_blob()
-    if image_blob:
-        print(f"Got image blob, size: {len(image_blob)} bytes")
-        # You can use the blob directly or send it over network
-
-    # Disconnect when done
-    camera_service.disconnect()
-
-
-if __name__ == "__main__":
-    example()

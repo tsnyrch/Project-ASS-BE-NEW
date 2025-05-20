@@ -1,6 +1,7 @@
 services:
   fast-api-docker-poetry:
     image: local/fast-api-server:${BUILD_TAG:-local-dev}
+    privileged: true
     ports:
       - "8009:8009"
     build:
@@ -8,19 +9,18 @@ services:
       dockerfile: Dockerfile
       target: ${TARGET:-development}
     environment:
-      POSTGRES_DB_HOST: postgresql
-      OTEL_SERVICE_NAME: fastApiDockerPoetry
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      POSTGRES_DB_HOST: fast-api-postgres # Change to localhost on Linux
       SET_JUMBO_MTU: "false"
       UVICORN_RELOAD: "true"
     volumes:
       - ./:/home/appuser
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
     depends_on:
       - fast-api-postgres
-      - jaeger
-    links:
-      - fast-api-postgres:postgresql
-      - jaeger:jaeger
+    # network_mode: host # Uncomment this line on Linux to use host network
+    networks: # Comment this line on Linux to use host network
+      - app-network # Comment this line on Linux to use host network
 
   fast-api-postgres:
     image: postgres:15-alpine
@@ -30,12 +30,9 @@ services:
       POSTGRES_DB: fastapi_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    networks: # Comment this line on Linux to use host network
+      - app-network # Comment this line on Linux to use host network
 
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    ports:
-      - "16686:16686" # Jaeger UI
-      - "4317:4317" # OTLP gRPC
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-      LOG_LEVEL: "debug"
+networks: #  Comment this line on Linux to use host network
+  app-network: #  Comment this line on Linux to use host network
+    driver: bridge #  Comment this line on Linux to use host network

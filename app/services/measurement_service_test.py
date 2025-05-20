@@ -9,19 +9,26 @@ from app.models.measurement_file import MeasurementFileOrm, MeasurementFileSchem
 from app.models.pageable import PageRequestSchema
 from app.repository.measurement_repository import MeasurementRepository
 from app.repository.measurement_file_repository import MeasurementFileRepository
-from app.services.aravis_camera_service import AravisCameraService
 from app.services.google_drive_service import GoogleDriveService
 
 logger = logging.getLogger(__name__)
 
 
-class MeasurementService:
+class MeasurementServiceTest:
     """
-    Service for measurement operations
+    Test version of the measurement service that doesn't use real cameras.
+    
+    This service is intended for testing purposes, replacing the real Aravis camera
+    connections with local test image files. It maintains the same interface as the
+    original MeasurementService, but doesn't require physical camera hardware.
+    
+    Use this service in test environments or when camera hardware is not available.
     """
     def __init__(self):
         self.measurement_repo = MeasurementRepository()
         self.file_repo = MeasurementFileRepository()
+        self.test_image_path = "ae/test.png"
+        self.ae_mock_file = "ae/ae.mock.txt"
 
     async def create_measurement(self, measurement: MeasurementInfoOrm) -> MeasurementInfoOrm:
         """
@@ -101,7 +108,7 @@ class MeasurementService:
 
     async def start_rgb_measurement(self, measurement_id: int, date_time: datetime, duration: int):
         """
-        Start RGB camera measurement
+        Start RGB camera measurement using test image instead of real camera
 
         Args:
             measurement_id: ID of the measurement
@@ -112,36 +119,33 @@ class MeasurementService:
             Status of the measurement
         """
         try:
-            # Create RGB camera service
-            rgb_camera = AravisCameraService(camera_id="Basler-21876874")
-            if not rgb_camera.connect():
-                logger.error("Failed to connect to RGB camera")
-                return {"status": "error", "message": "Failed to connect to RGB camera"}
-
+            # Use test image instead of connecting to camera
+            logger.info(f"Using test image {self.test_image_path} instead of RGB camera capture")
+            
+            # Check if the test image exists
+            if not os.path.exists(self.test_image_path):
+                logger.error(f"Test image not found: {self.test_image_path}")
+                return {"status": "error", "message": f"Test image not found: {self.test_image_path}"}
+            
+            # Read test image content
+            with open(self.test_image_path, 'rb') as f:
+                image_blob = f.read()
+            
             # Capture image as blob
             timestamp = date_time.strftime("%Y%m%d%H%M%S")
             rgb_filename = f"RGB_{timestamp}.png"
             format = "PNG"
 
-            # Get image as blob
-            image_blob = rgb_camera.get_image_blob(format=format)
-            if not image_blob:
-                logger.error("Failed to capture image from RGB camera")
-                rgb_camera.disconnect()
-                return {"status": "error", "message": "Failed to capture image from RGB camera"}
-
             # Upload to Google Drive
             drive_service = GoogleDriveService()
             if not drive_service.authenticate():
                 logger.error("Failed to authenticate with Google Drive")
-                rgb_camera.disconnect()
                 return {"status": "error", "message": "Failed to authenticate with Google Drive"}
 
             folder_path = f"/measurements/{measurement_id}"
             folder_id = drive_service.create_folder_path(folder_path)
             if not folder_id:
                 logger.error(f"Failed to create folder for measurement {measurement_id}")
-                rgb_camera.disconnect()
                 return {"status": "error", "message": "Failed to create folder in Google Drive"}
 
             file_id = drive_service.upload_file_to_path(
@@ -154,11 +158,10 @@ class MeasurementService:
 
             if not file_id:
                 logger.error("Failed to upload RGB image to Google Drive")
-                rgb_camera.disconnect()
                 return {"status": "error", "message": "Failed to upload image to Google Drive"}
 
             # Save file reference to the database with timestamps
-            now = datetime.utcnow()
+            now = datetime.now()
             file = MeasurementFileOrm(
                 name=rgb_filename,
                 google_drive_file_id=file_id,
@@ -168,7 +171,6 @@ class MeasurementService:
             )
             await self.file_repo.save(file)
 
-            rgb_camera.disconnect()
             return {"status": "success", "message": f"RGB measurement {measurement_id} completed successfully", "file_id": file_id}
 
         except Exception as e:
@@ -177,7 +179,7 @@ class MeasurementService:
 
     async def start_multispectral_measurement(self, measurement_id: int, date_time: datetime):
         """
-        Start multispectral camera measurement
+        Start multispectral camera measurement using test image instead of real camera
 
         Args:
             measurement_id: ID of the measurement
@@ -187,36 +189,33 @@ class MeasurementService:
             Status of the measurement
         """
         try:
-            # Create multispectral camera service
-            ms_camera = AravisCameraService(camera_id="00:11:1c:f9:50:a4")
-            if not ms_camera.connect():
-                logger.error("Failed to connect to multispectral camera")
-                return {"status": "error", "message": "Failed to connect to multispectral camera"}
-
+            # Use test image instead of connecting to camera
+            logger.info(f"Using test image {self.test_image_path} instead of multispectral camera capture")
+            
+            # Check if the test image exists
+            if not os.path.exists(self.test_image_path):
+                logger.error(f"Test image not found: {self.test_image_path}")
+                return {"status": "error", "message": f"Test image not found: {self.test_image_path}"}
+            
+            # Read test image content
+            with open(self.test_image_path, 'rb') as f:
+                image_blob = f.read()
+            
             # Capture image as blob
             timestamp = date_time.strftime("%Y%m%d%H%M%S")
             ms_filename = f"Multispectral_{timestamp}.png"
             format = "PNG"
 
-            # Get image as blob
-            image_blob = ms_camera.get_image_blob(format=format)
-            if not image_blob:
-                logger.error("Failed to capture image from multispectral camera")
-                ms_camera.disconnect()
-                return {"status": "error", "message": "Failed to capture image from multispectral camera"}
-
             # Upload to Google Drive
             drive_service = GoogleDriveService()
             if not drive_service.authenticate():
                 logger.error("Failed to authenticate with Google Drive")
-                ms_camera.disconnect()
                 return {"status": "error", "message": "Failed to authenticate with Google Drive"}
 
             folder_path = f"/measurements/{measurement_id}"
             folder_id = drive_service.create_folder_path(folder_path)
             if not folder_id:
                 logger.error(f"Failed to create folder for measurement {measurement_id}")
-                ms_camera.disconnect()
                 return {"status": "error", "message": "Failed to create folder in Google Drive"}
 
             file_id = drive_service.upload_file_to_path(
@@ -229,11 +228,10 @@ class MeasurementService:
 
             if not file_id:
                 logger.error("Failed to upload multispectral image to Google Drive")
-                ms_camera.disconnect()
                 return {"status": "error", "message": "Failed to upload image to Google Drive"}
 
             # Save file reference to the database with timestamps
-            now = datetime.utcnow()
+            now = datetime.now()
             file = MeasurementFileOrm(
                 name=ms_filename,
                 google_drive_file_id=file_id,
@@ -243,7 +241,6 @@ class MeasurementService:
             )
             await self.file_repo.save(file)
 
-            ms_camera.disconnect()
             return {"status": "success", "message": f"Multispectral measurement {measurement_id} completed successfully", "file_id": file_id}
 
         except Exception as e:
@@ -252,7 +249,7 @@ class MeasurementService:
 
     async def capture_acoustic_data(self, measurement_id: int, number_of_sensors: int, length_of_ae: float):
         """
-        Capture acoustic emission data
+        Capture acoustic emission data using test file
 
         Args:
             measurement_id: ID of the measurement
@@ -263,9 +260,6 @@ class MeasurementService:
             Status of the acoustic capture
         """
         try:
-            # This would interface with your acoustic emission system
-            # For now, we'll use a mock file as placeholder
-
             timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
             drive_service = GoogleDriveService()
 
@@ -285,15 +279,14 @@ class MeasurementService:
             # For each sensor, upload a mock file
             for sensor_id in range(1, number_of_sensors + 1):
                 ae_filename = f"AE_sensor{sensor_id}_{timestamp}.txt"
-                ae_mock_file = "ae/ae.mock.txt"
 
                 # Check if the mock file exists
-                if not os.path.exists(ae_mock_file):
-                    logger.error(f"Acoustic emission mock file not found: {ae_mock_file}")
-                    return {"status": "error", "message": f"Mock data file not found: {ae_mock_file}"}
+                if not os.path.exists(self.ae_mock_file):
+                    logger.error(f"Acoustic emission mock file not found: {self.ae_mock_file}")
+                    return {"status": "error", "message": f"Mock data file not found: {self.ae_mock_file}"}
                 
                 # Read mock file content
-                with open(ae_mock_file, 'rb') as f:
+                with open(self.ae_mock_file, 'rb') as f:
                     ae_content = f.read()
 
                 # Upload to Google Drive
@@ -310,7 +303,7 @@ class MeasurementService:
                     return {"status": "error", "message": f"Failed to upload acoustic data for sensor {sensor_id}"}
 
                 # Save file reference to the database with timestamps
-                now = datetime.utcnow()
+                now = datetime.now()
                 file = MeasurementFileOrm(
                     name=ae_filename,
                     google_drive_file_id=file_id,
@@ -354,6 +347,8 @@ class MeasurementService:
 
             # Process each component based on configuration
             results = []
+            
+            logger.info(f"Starting test measurement with config: RGB={config.rgb_camera}, MS={config.multispectral_camera}, Sensors={config.number_of_sensors}")
 
             # RGB camera
             if config.rgb_camera:
@@ -393,6 +388,27 @@ class MeasurementService:
             logger.error(f"Error starting measurement by config: {e}")
             return None
 
+    def validate_test_env(self) -> bool:
+        """
+        Validates if test environment is properly set up by checking if required test files exist
+        
+        Returns:
+            True if all required test files are present, False otherwise
+        """
+        files_to_check = [self.test_image_path, self.ae_mock_file]
+        missing_files = []
+        
+        for file_path in files_to_check:
+            if not os.path.exists(file_path):
+                missing_files.append(file_path)
+                
+        if missing_files:
+            logger.error(f"Test environment validation failed. Missing files: {', '.join(missing_files)}")
+            return False
+            
+        logger.info("Test environment validation successful - all required test files present")
+        return True
+        
     async def get_measurement_files(self, measurement_id: int) -> List[MeasurementFileOrm]:
         """
         Get all files for a specific measurement

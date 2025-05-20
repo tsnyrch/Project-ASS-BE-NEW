@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from typing import Optional
 
 from sqlalchemy import select, func
 
@@ -22,9 +21,9 @@ class SettingsRepository:
             )
             return count.scalar_one()
 
-    async def _create_default_measurement_config(self) -> MeasurementConfigOrm:
+    async def _create_default_measurement_config(self) -> MeasurementConfigSchema:
         """
-        Create a default measurement config in the database
+        Create a default measurement config in the database and return as schema
         """
         async with get_db_session() as session:
             default_config = MeasurementConfigOrm(
@@ -33,49 +32,73 @@ class SettingsRepository:
                 rgb_camera=True,
                 multispectral_camera=False,
                 number_of_sensors=1,
-                length_of_ae=10  # 10 minutes default
+                length_of_ae=10,  # 10 minutes default
             )
-            
             session.add(default_config)
-            await session.commit()
+            # Commit happens automatically when context manager exits
+            await session.flush()  # Ensure the object has an ID
             await session.refresh(default_config)
-            return default_config
+            return MeasurementConfigSchema.from_orm(default_config)
 
     async def get_measurement_config(self) -> MeasurementConfigSchema:
         """
         Get the current measurement configuration
         """
         async with get_db_session() as session:
-            # Get the config or create a default one if none exists
             config_count = await self._get_config_count()
-            
             if config_count == 0:
-                config = await self._create_default_measurement_config()
+                # Create and return default config as schema
+                return await self._create_default_measurement_config()
             else:
                 result = await session.execute(
-                    select(MeasurementConfigOrm).order_by(MeasurementConfigOrm.id.desc()).limit(1)
+                    select(MeasurementConfigOrm)
+                    .order_by(MeasurementConfigOrm.id.desc())
+                    .limit(1)
                 )
                 config = result.scalars().first()
-                
-            return MeasurementConfigSchema.from_orm(config)
+                return MeasurementConfigSchema.from_orm(config)
 
-    async def update_measurement_config(self, config: MeasurementConfigSchema) -> MeasurementConfigSchema:
+    async def update_measurement_config(
+        self, config: MeasurementConfigSchema
+    ) -> MeasurementConfigSchema:
         """
         Update the measurement configuration
         """
         async with get_db_session() as session:
-            # Always create a new config record to maintain history
-            new_config = MeasurementConfigOrm(
-                measurement_frequency=config.measurement_frequency,
-                first_measurement=config.first_measurement,
-                rgb_camera=config.rgb_camera,
-                multispectral_camera=config.multispectral_camera,
-                number_of_sensors=config.number_of_sensors,
-                length_of_ae=config.length_of_ae
-            )
+            # Check if a config already exists
+            config_count = await self._get_config_count()
+        
+            if config_count == 0:
+                # Create new config if none exists
+                new_config = MeasurementConfigOrm(
+                    measurement_frequency=config.measurement_frequency,
+                    first_measurement=config.first_measurement,
+                    rgb_camera=config.rgb_camera,
+                    multispectral_camera=config.multispectral_camera,
+                    number_of_sensors=config.number_of_sensors,
+                    length_of_ae=config.length_of_ae,
+                )
+                session.add(new_config)
+                await session.flush()  # Ensure the object has an ID
+                await session.refresh(new_config)
+                return MeasurementConfigSchema.from_orm(new_config)
+            else:
+                # Update existing config
+                result = await session.execute(
+                    select(MeasurementConfigOrm)
+                    .order_by(MeasurementConfigOrm.id.desc())
+                    .limit(1)
+                )
+                existing_config = result.scalars().first()
             
-            session.add(new_config)
-            await session.commit()
-            await session.refresh(new_config)
+                # Update fields
+                existing_config.measurement_frequency = config.measurement_frequency
+                existing_config.first_measurement = config.first_measurement
+                existing_config.rgb_camera = config.rgb_camera
+                existing_config.multispectral_camera = config.multispectral_camera
+                existing_config.number_of_sensors = config.number_of_sensors
+                existing_config.length_of_ae = config.length_of_ae
             
-            return MeasurementConfigSchema.from_orm(new_config)
+                await session.flush()
+                await session.refresh(existing_config)
+                return MeasurementConfigSchema.from_orm(existing_config)

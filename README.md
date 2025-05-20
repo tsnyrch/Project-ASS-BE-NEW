@@ -102,7 +102,6 @@ The application is configured to run in Docker with the following features:
    - `tracing`: Adds Jaeger for observability
 
 3. **Environment Variables**:
-   - `SET_JUMBO_MTU`: Set to "true" to enable jumbo packet MTU (9000) for camera operations that require high bandwidth
    - `APP_RELOAD`: Set to "true" to enable auto-reload for development
    - `OTEL_SERVICE_NAME`: Service name for OpenTelemetry tracing
 

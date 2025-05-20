@@ -21,8 +21,9 @@ class SettingsService:
     async def update_measurement_config(self, config: MeasurementConfigSchema) -> MeasurementConfigSchema:
         """
         Update the measurement configuration
-
-        This method also updates the measurement scheduler if frequency or first measurement time changes
+        
+        This method updates the existing configuration record rather than creating a new one.
+        It also updates the measurement scheduler if frequency or first measurement time changes.
         """
         old_config = await self.settings_repo.get_measurement_config()
 
@@ -33,7 +34,7 @@ class SettingsService:
         if old_config.first_measurement.tzinfo is None:
             old_config.first_measurement = old_config.first_measurement.replace(tzinfo=timezone.utc)
 
-        # First update config in repository to get an ID
+        # Update the existing configuration in the repository
         updated_config = await self.settings_repo.update_measurement_config(config)
 
         # Update scheduler if frequency or first measurement changed

@@ -3,7 +3,7 @@ from sqlalchemy.exc import NoResultFound
 
 from app.models.base import BaseOrm
 from app.models.pageable import PageRequestSchema
-from app.utils.db_session import sessionmaker, get_db_session
+from app.utils.db_session import get_db_session
 
 
 class BaseRepository:
@@ -15,6 +15,8 @@ class BaseRepository:
     async def save(self, data):
         async with get_db_session() as session:
             session.add(data)
+            await session.flush()  # Ensure the object has an ID
+            await session.refresh(data)
             return data
 
     async def delete(self, data):
@@ -25,7 +27,7 @@ class BaseRepository:
         async with get_db_session() as session:
             try:
                 execute = await session.execute(select(self.__model__).filter_by(id=id))
-                return execute.one()[0]
+                return execute.scalars().first()
             except NoResultFound as e:
                 if args:
                     return args[0]
@@ -38,7 +40,8 @@ class BaseRepository:
     async def get_by_ids(self, ids, *args):
         async with get_db_session() as session:
             try:
-                return await session.execute(select(self.__model__).filter(self.__model__.id.in_(ids))).fetchall()
+                result = await session.execute(select(self.__model__).filter(self.__model__.id.in_(ids)))
+                return result.scalars().all()
             except NoResultFound as e:
                 if args:
                     return args[0]
@@ -50,7 +53,6 @@ class BaseRepository:
             execute = await session.execute(select(func.count()).select_from(self.__model__).filter_by(**params))
             total_count = execute.scalar()
             if total_count > 0:
-                # query = db.query(self.__model__).filter_by(**params)
                 sort = getattr(self.__model__, pageable.sort)
                 execute = await session.execute(
                     select(self.__model__).filter_by(**params).order_by(pageable.sql_sort(sort))

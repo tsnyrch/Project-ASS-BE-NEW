@@ -1,6 +1,3 @@
-import json
-from pathlib import Path
-
 import psycopg2
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -17,10 +14,10 @@ from app.controllers.measurement_controller import measurement_router
 from app.controllers.settings_controller import settings_router
 from app.controllers.system_controller import system_router
 from app.controllers.user_controller import user_router
-from app.models.measurement import MeasurementConfigSchema
 from app.services.cron_scheduler import CronScheduler
 from app.services.settings_service import SettingsService
 from app.utils import db_session
+from app.services.measurement_service import MeasurementService
 
 settings = get_settings()
 
@@ -57,16 +54,19 @@ def create_application() -> FastAPI:
 
     # Include routers with their new prefixes
     application.include_router(system_router, prefix="/api")
-    application.include_router(camera_router, prefix="/api")
     application.include_router(user_router, prefix="/api")
     application.include_router(measurement_router, prefix="/api")
     application.include_router(settings_router, prefix="/api")
+    application.include_router(camera_router, prefix="/api")
 
-    # Add catch-all route for unknown endpoints
-    @application.api_route(
-        "/{path_name:path}",
-        methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
-    )
+    # Add catch-all routes for unknown endpoints with unique operation IDs
+    @application.get("/{path_name:path}", operation_id="catch_all_get")
+    @application.post("/{path_name:path}", operation_id="catch_all_post")
+    @application.put("/{path_name:path}", operation_id="catch_all_put")
+    @application.delete("/{path_name:path}", operation_id="catch_all_delete")
+    @application.patch("/{path_name:path}", operation_id="catch_all_patch")
+    @application.head("/{path_name:path}", operation_id="catch_all_head")
+    @application.options("/{path_name:path}", operation_id="catch_all_options")
     async def catch_all(path_name: str):
         """Handle all unknown routes"""
         return {"detail": f"Endpoint '/{path_name}' not found", "status_code": 404}
@@ -82,9 +82,6 @@ def create_application() -> FastAPI:
         conn.close()
         print("Successfully connected to postgres...")
 
-        # Migrate existing JSON config to database if needed
-        await migrate_measurement_config()
-
         # Set up the scheduler based on the configuration
         await initialize_scheduler()
 
@@ -93,41 +90,6 @@ def create_application() -> FastAPI:
         await db_session.shutdown()
 
     return application
-
-
-async def migrate_measurement_config():
-    """Migrate the measurement configuration from JSON file to the database if needed"""
-
-    json_path = Path("data/measurement_config.json")
-
-    # Skip if the file doesn't exist
-    if not json_path.exists():
-        print("No JSON configuration file found, skipping migration")
-        return
-
-    try:
-        # Check if we already have configurations in the database
-        settings_service = SettingsService()
-
-        # Read the JSON file
-        with open(json_path, "r") as f:
-            config_data = json.load(f)
-
-        # Create config schema
-        config = MeasurementConfigSchema(**config_data)
-
-        # Save to database
-        await settings_service.update_measurement_config(config)
-
-        # Rename the old file to prevent re-migration
-        backup_path = json_path.with_suffix(".json.migrated")
-        json_path.rename(backup_path)
-
-        print("Successfully migrated measurement config from JSON to database")
-        print(f"Original file backed up to {backup_path}")
-
-    except Exception as e:
-        print(f"Error during config migration: {str(e)}")
 
 
 async def initialize_scheduler():
@@ -140,12 +102,18 @@ async def initialize_scheduler():
 
         # Configure the scheduler
         scheduler = CronScheduler.get_instance()
+        
+        # Initialize services in the scheduler
+        scheduler.measurement_service = MeasurementService()
+        scheduler.settings_service = settings_service
+        
+        # Set up the schedule
         scheduler.set_new_schedule(
             config.measurement_frequency, config.first_measurement, config.id
         )
 
         print(
-            f"Scheduler initialized with frequency: {config.measurement_frequency} minutes"
+            f"Scheduler initialized with frequency: {config.measurement_frequency} minutes RGB: {config.rgb_camera} Multispectral: {config.multispectral_camera}"
         )
         print(
             f"First measurement scheduled for: {config.first_measurement.isoformat()}"
@@ -164,5 +132,5 @@ if __name__ == "__main__":
         port=settings.port,
         log_level=settings.log_level,
         access_log=True,
-        reload=settings.app_reload,  # has to be false for tracing to work
+        reload=settings.app_reload,
     )
