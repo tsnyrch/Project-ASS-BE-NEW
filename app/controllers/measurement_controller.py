@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user
 from app.models.measurement import (
+    MeasurementConfigSchema,
     MeasurementHistorySchema,
     MeasurementInfoOrm,
     MeasurementInfoSchema,
@@ -317,19 +318,24 @@ class MeasurementController:
         "/start",
         response_model=MeasurementStartResponse,
         summary="Start a new measurement",
-        description="Manually initiates a new measurement process",
+        description="Manually initiates a new measurement process with optional configuration",
     )
     async def start_measurement(
-        self, current_user: TokenPayloadSchema = Depends(get_current_user)
+        self, 
+        config: Optional[MeasurementConfigSchema] = Body(None),
+        current_user: TokenPayloadSchema = Depends(get_current_user)
     ) -> MeasurementStartResponse:
         """
         Start a new measurement manually.
 
-        Triggers an immediate measurement using the current configuration settings.
+        Triggers an immediate measurement using the provided configuration settings or the current settings if none are provided.
         This endpoint is useful for on-demand measurements outside the regular schedule.
+    
+        Parameters:
+            - config: Optional measurement configuration to use for this measurement
         """
         try:
-            measurement = await self.start_measurement_logic(scheduled=False)
+            measurement = await self.start_measurement_logic(scheduled=False, config=config)
             return MeasurementStartResponse(
                 success=True,
                 message="Measurement started successfully",
@@ -341,18 +347,23 @@ class MeasurementController:
             )
 
     async def start_measurement_logic(
-        self, scheduled: bool = False
+        self, scheduled: bool = False, config: Optional[MeasurementConfigSchema] = None
     ) -> MeasurementInfoSchema:
         """
         Logic for starting a new measurement
 
         Can be called manually or by the scheduler
+
+        Parameters:
+            - scheduled: Whether this is a scheduled measurement or manually triggered
+            - config: Optional configuration to use for this measurement instead of the stored config
         """
         logger.info(f"Starting measurement (scheduled: {scheduled})")
 
         try:
-            # Get current configuration
-            config = await self.settings_service.get_measurement_config()
+            # Get configuration - use provided config or fetch current configuration
+            if config is None:
+                config = await self.settings_service.get_measurement_config()
 
             # Create new measurement record
             new_measurement = MeasurementInfoOrm(

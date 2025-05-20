@@ -13,7 +13,7 @@ ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
 
 ENV PATH="$POETRY_HOME/bin:$VENV_PATH/bin:$PATH"
-ENV PYTHONPATH="${PYSETUP_PATH}"
+ENV PYTHONPATH="${PYTHONPATH}:${PYSETUP_PATH}"
 
 # Install Aravis dependencies and essential packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -95,7 +95,7 @@ RUN curl -sSL https://install.python-poetry.org | python3 -
 
 # Make PyGObject modules visible in our virtual environment
 ENV GI_TYPELIB_PATH="/usr/lib/aarch64-linux-gnu/girepository-1.0:/usr/local/lib/aarch64-linux-gnu/girepository-1.0"
-ENV LD_LIBRARY_PATH="/usr/local/lib/aarch64-linux-gnu:/usr/local/lib"
+ENV LD_LIBRARY_PATH="/usr/local/lib/aarch64-linux-gnu:/usr/local/lib:${LD_LIBRARY_PATH}"
 
 # Copy project dependency files
 COPY --chown=appuser ./pyproject.toml ./poetry.lock ./
@@ -115,10 +115,7 @@ RUN poetry install
 
 WORKDIR /home/appuser
 
-# Remove this line, app will be mounted as a volume:
-# COPY --chown=appuser . .
-# Instead, only copy scripts (if needed for entrypoint)
-COPY --chown=appuser ./scripts ./scripts
+COPY --chown=appuser . .
 RUN chmod +x scripts/*
 
 # Create a script to set MTU for jumbo packets

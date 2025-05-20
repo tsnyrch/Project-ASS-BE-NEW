@@ -5,7 +5,6 @@ import psycopg2
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from httpx import HTTPError
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError, NoResultFound, ProgrammingError
@@ -63,8 +62,14 @@ def create_application() -> FastAPI:
     application.include_router(measurement_router, prefix="/api")
     application.include_router(settings_router, prefix="/api")
 
-    # Mount static files
-    application.mount("/static", StaticFiles(directory="app/static"), name="static")
+    # Add catch-all route for unknown endpoints
+    @application.api_route(
+        "/{path_name:path}",
+        methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+    )
+    async def catch_all(path_name: str):
+        """Handle all unknown routes"""
+        return {"detail": f"Endpoint '/{path_name}' not found", "status_code": 404}
 
     @application.on_event("startup")
     async def initialize():
